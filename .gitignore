@@ -1,0 +1,16 @@
+# Never upload .env to GitHub!
+# It contains your passwords!
+.env
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment
+venv/
+.venv/
+
+# OS files
+.DS_Store
+Thumbs.db
