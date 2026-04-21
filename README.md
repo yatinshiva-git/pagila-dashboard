@@ -22,5 +22,5 @@ Demonstrates cloud migration, replication, and HA concepts.
 - Azure App Service (deployment)
 
 ## Author
-Sudhakar — DBA → Data Platform Engineer
+Sudhakar — DBA → Data Platform Engineer -
 AZ-104 Certified | PostgreSQL | Python | Azure
