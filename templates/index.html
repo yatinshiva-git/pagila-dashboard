@@ -1076,7 +1076,8 @@
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
-      const maxCount = data[0].rental_count;
+      const maxCount = data.data[0].rental_count;
+      const dbSource = data.data_source;
       const rankClass = i => i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
 
       document.getElementById('films-table').innerHTML = `
@@ -1091,7 +1092,7 @@
             </tr>
           </thead>
           <tbody>
-            ${data.map((f, i) => `
+            ${data.data.map((f, i) => `
               <tr>
                 <td><span class="rank-badge ${rankClass(i)}">${i+1}</span></td>
                 <td style="color:var(--text);font-weight:500">${f.film_title}</td>
@@ -1125,7 +1126,8 @@
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
-      const maxSpent = parseFloat(data[0].total_spent);
+      const maxSpent = parseFloat(data.data[0].total_spent);
+      const dbSource = data.data_source;
       const rankClass = i => i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
 
       document.getElementById('customers-table').innerHTML = `
@@ -1140,7 +1142,7 @@
             </tr>
           </thead>
           <tbody>
-            ${data.map((c, i) => `
+            ${data.data.map((c, i) => `
               <tr>
                 <td><span class="rank-badge ${rankClass(i)}">${i+1}</span></td>
                 <td style="color:var(--text);font-weight:500">${c.customer_name}</td>
@@ -1176,9 +1178,9 @@
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
-      const labels   = data.map(r => r.month);
-      const revenues = data.map(r => parseFloat(r.revenue));
-      const payments = data.map(r => r.payment_count);
+      const labels   = data.data.map(r => r.month);
+      const revenues = data.data.map(r => parseFloat(r.revenue));
+      const payments = data.data.map(r => r.payment_count);
 
       // Revenue line chart
       if (revenueChartInst) revenueChartInst.destroy();
@@ -1227,7 +1229,7 @@
             <tr><th>Month</th><th>Revenue</th><th>Payments</th></tr>
           </thead>
           <tbody>
-            ${data.map(r => `
+            ${data.data.map(r => `
               <tr>
                 <td style="color:var(--text)">${r.month}</td>
                 <td class="money-green">$${Number(r.revenue).toLocaleString()}</td>

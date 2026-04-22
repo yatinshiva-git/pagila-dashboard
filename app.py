@@ -37,41 +37,59 @@ CORS(app)   # allow cross-origin requests (needed when frontend calls API)
 #  Every endpoint calls this to get a fresh DB connection.
 #  Using psycopg2 with SSL because Azure PostgreSQL requires it.
 # ════════════════════════════════════════════════════════════
+
+def _azure_conn():
+    """Raw Azure PostgreSQL connection"""
+    return psycopg2.connect(
+        host            = os.getenv("DB_HOST"),
+        port            = os.getenv("DB_PORT", 5432),
+        dbname          = os.getenv("DB_NAME", "pagila"),
+        user            = os.getenv("DB_USER", "dbadmin"),
+        password        = os.getenv("DB_PASSWORD"),
+        sslmode         = os.getenv("DB_SSLMODE", "require"),
+        connect_timeout = 5
+    )
+
+
+def _local_conn():
+    """Raw Local PostgreSQL connection"""
+    return psycopg2.connect(
+        host            = os.getenv("LOCAL_DB_HOST", "localhost"),
+        port            = os.getenv("LOCAL_DB_PORT", 5432),
+        dbname          = os.getenv("LOCAL_DB_NAME", "pagila"),
+        user            = os.getenv("LOCAL_DB_USER", "dbadmin"),
+        password        = os.getenv("LOCAL_DB_PASSWORD", "admin123"),
+        sslmode         = "disable",
+        connect_timeout = 3
+    )
+
+
 def get_db_connection():
     """
-    Opens and returns a connection to Azure PostgreSQL.
-    Reads credentials from environment variables (loaded from .env).
+    Smart connection with automatic fallback!
+    Tries Azure first → falls back to local DB.
+    Returns: (connection, source_name)
+    This is CONNECTION RESILIENCE — same concept
+    as Oracle Data Guard automatic failover!
     """
-    conn = psycopg2.connect(
-        host     = os.getenv("DB_HOST"),       # Azure PG hostname
-        port     = os.getenv("DB_PORT", 5432), # default PostgreSQL port
-        dbname   = os.getenv("DB_NAME"),       # pagila
-        user     = os.getenv("DB_USER"),       # dbadmin
-        password = os.getenv("DB_PASSWORD"),   # Admin###123
-        sslmode  = os.getenv("DB_SSLMODE", "require")  # Azure requires SSL
-    )
-    return conn
+    # Try Azure first
+    try:
+        conn = _azure_conn()
+        return conn, "Azure PostgreSQL"
+    except Exception as e1:
+        print(f"[FALLBACK] Azure failed: {e1}")
+        print(f"[FALLBACK] Trying Local PostgreSQL...")
 
-
-def get_local_db_connection():
-    """
-    Opens and returns a connection to LOCAL PostgreSQL inside WSL2.
-    This is our 'source' database in the replication simulation.
-    Uses separate LOCAL_* env vars so both DBs coexist in .env.
-    connect_timeout=3 means: if local DB is down, fail in 3 seconds
-    (so the failover tab can detect it quickly, not hang forever).
-    """
-    conn = psycopg2.connect(
-        host     = os.getenv("LOCAL_DB_HOST",     "localhost"),
-        port     = os.getenv("LOCAL_DB_PORT",     5432),
-        dbname   = os.getenv("LOCAL_DB_NAME",     "pagila"),
-        user     = os.getenv("LOCAL_DB_USER",     "dbadmin"),
-        password = os.getenv("LOCAL_DB_PASSWORD", "Admin###123"),
-        sslmode  = "disable",      # local PostgreSQL doesn't use SSL
-        connect_timeout = 3        # fail fast if local DB is down
-    )
-    return conn
-
+    # Fallback to local
+    try:
+        conn = _local_conn()
+        print(f"[FALLBACK] Connected to Local PostgreSQL!")
+        return conn, "Local PostgreSQL (Fallback)"
+    except Exception as e2:
+        raise Exception(
+            f"Both DBs failed! "
+            f"Azure: {e1} | Local: {e2}"
+        )
 
 # ════════════════════════════════════════════════════════════
 #  ROUTE 1 — HOME PAGE  (GET /)
@@ -101,8 +119,9 @@ def index():
 def overview():
     """Returns total counts across all major tables."""
     conn = None
+    db_source = None
     try:
-        conn = get_db_connection()
+        conn, db_source = get_db_connection()
 
         # RealDictCursor returns rows as Python dicts (key=column name)
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -121,7 +140,9 @@ def overview():
         row = cur.fetchone()   # fetchone() because we expect exactly 1 row
         cur.close()
 
-        return jsonify(dict(row))   # convert to JSON and send to browser
+        result = dict(row)
+        result["data_source"] = db_source
+        return jsonify(result)
 
     except Exception as e:
         # If DB connection fails, return error message with HTTP 500
@@ -148,8 +169,9 @@ def overview():
 def films():
     """Returns top 10 most rented films with their category."""
     conn = None
+    db_source = None
     try:
-        conn = get_db_connection()
+        conn, db_source = get_db_connection()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
         cur.execute("""
@@ -174,7 +196,8 @@ def films():
         rows = cur.fetchall()   # fetchall() returns a list of rows
         cur.close()
 
-        return jsonify([dict(r) for r in rows])   # list of dicts → JSON array
+        result = [dict(r) for r in rows]
+        return jsonify({"data": result, "data_source": db_source})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -199,8 +222,9 @@ def films():
 def customers():
     """Returns top 10 customers ranked by total revenue."""
     conn = None
+    db_source = None
     try:
-        conn = get_db_connection()
+        conn, db_source = get_db_connection()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
         cur.execute("""
@@ -220,7 +244,8 @@ def customers():
         rows = cur.fetchall()
         cur.close()
 
-        return jsonify([dict(r) for r in rows])
+        result = [dict(r) for r in rows]
+        return jsonify({"data": result, "data_source": db_source})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -247,8 +272,9 @@ def customers():
 def revenue():
     """Returns monthly revenue — works across all payment partitions."""
     conn = None
+    db_source = None
     try:
-        conn = get_db_connection()
+        conn, db_source = get_db_connection()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
         cur.execute("""
@@ -265,7 +291,8 @@ def revenue():
         rows = cur.fetchall()
         cur.close()
 
-        return jsonify([dict(r) for r in rows])
+        result = [dict(r) for r in rows]
+        return jsonify({"data": result, "data_source": db_source})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
