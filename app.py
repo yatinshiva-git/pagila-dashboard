@@ -341,7 +341,7 @@ def replication():
     # ── Step 1: Query LOCAL PostgreSQL (source) ──────────────
     local_conn = None
     try:
-        local_conn = get_local_db_connection()
+        local_conn = _local_conn()
         cur = local_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
             SELECT
@@ -372,7 +372,7 @@ def replication():
     # ── Step 2: Query AZURE PostgreSQL (replica) ─────────────
     azure_conn = None
     try:
-        azure_conn = get_db_connection()
+        azure_conn, _ = get_db_connection()
         cur = azure_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
             SELECT
@@ -472,7 +472,7 @@ def failover():
     source_detail = ""
     local_conn = None
     try:
-        local_conn = get_local_db_connection()
+        local_conn = _local_conn()
         cur = local_conn.cursor()
         cur.execute("SELECT version()")          # simplest possible health check
         ver = cur.fetchone()[0]
@@ -491,7 +491,7 @@ def failover():
     azure_detail = ""
     azure_conn = None
     try:
-        azure_conn = get_db_connection()
+        azure_conn, _ = get_db_connection()
         cur = azure_conn.cursor()
         cur.execute("SELECT version()")
         ver = cur.fetchone()[0]
